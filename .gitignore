@@ -1,2 +1,9 @@
 .idea/
 .DS_store
+
+# cache
+*.pyc
+
+# exclude big data dir
+data
+exps
