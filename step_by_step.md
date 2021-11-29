@@ -1,11 +1,8 @@
 conda create -n frozen python=3.7
+conda install opencv -c pytorch
 conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch
-conda install tqdm pandas transformers
+conda install -c huggingface transformers tokenizers=0.10.1
+conda install tqdm pandas scipy matplotlib psutil humanize scikit-learn
+conda install av sacred  timm einops dominate -c conda-forge
 
-
-
-sacred decord 
-
-cv2 -> opencv py-opencv?
-
-av scipy timm einops dominate humanize psutil matplotlib
+pip install decord

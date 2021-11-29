@@ -36,18 +36,18 @@ def dataset_loader(dataset_name,
     #  ...is this safe / or just lazy?
     if dataset_name == "MSRVTT":
         dataset = MSRVTT(**kwargs)
-    elif dataset_name == "SomethingSomethingV2":
-        dataset = SomethingSomethingV2(**kwargs)
+    # elif dataset_name == "SomethingSomethingV2":
+    #     dataset = SomethingSomethingV2(**kwargs)
     elif dataset_name == "WebVid":
         dataset = WebVid(**kwargs)
     elif dataset_name == "ConceptualCaptions3M":
         dataset = ConceptualCaptions3M(**kwargs)
-    elif dataset_name == "ConceptualCaptions12M":
-        dataset = ConceptualCaptions12M(**kwargs)
+    # elif dataset_name == "ConceptualCaptions12M":
+    #     dataset = ConceptualCaptions12M(**kwargs)
     elif dataset_name == "LSMDC":
         dataset = LSMDC(**kwargs)
-    elif dataset_name == "COCOCaptions":
-        dataset = COCOCaptions(**kwargs)
+    # elif dataset_name == "COCOCaptions":
+    #     dataset = COCOCaptions(**kwargs)
     else:
         raise NotImplementedError(f"Dataset: {dataset_name} not found.")
 
