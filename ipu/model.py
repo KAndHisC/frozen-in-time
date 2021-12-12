@@ -83,25 +83,26 @@ class FrozenInTime(BaseModel):
     def set_device(self, device):
         self.device = device
 
-    def forward(self, data, return_embeds=True):
+    def forward(self, input_ids, attention_mask, video_data ):# return_embeds=True
 
-        text_data = data['text']
-        video_data = data['video']
+        # text_data = data['text']
+        # video_data = data['video']
 
-        text_embeddings = self.compute_text(text_data)
+        # text_embeddings = self.compute_text(text_data)
+        text_embeddings = self.compute_text(input_ids, attention_mask)
         video_embeddings = self.compute_video(video_data)
-
-        if return_embeds:
-            return text_embeddings, video_embeddings
+        # TODO--
+        # if return_embeds:
+        #     return text_embeddings, video_embeddings
 
         return sim_matrix(text_embeddings, video_embeddings)
 
-    def compute_text(self, text_data):
+    def compute_text(self, input_ids, attention_mask):
         if self.text_params['model'].startswith('bert'):
-            text_embeddings = self.text_model(text_data['input_ids'], attention_mask=text_data['attention_mask'])[
+            text_embeddings = self.text_model(input_ids, attention_mask=attention_mask)[
                 'pooler_output']
         elif self.text_params['model'].startswith('distilbert'):
-            text_embeddings = self.text_model(**text_data).last_hidden_state[:, 0, :]
+            text_embeddings = self.text_model(input_ids=input_ids,attention_mask=attention_mask).last_hidden_state[:, 0, :]
         else:
             raise NotImplementedError
         text_embeddings = self.txt_proj(text_embeddings)
