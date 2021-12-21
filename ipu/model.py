@@ -4,12 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
 
-from base import BaseModel
-from model.video_transformer import SpaceTimeTransformer
+from model.model import FrozenInTime
+from ipu.video_transformer import SpaceTimeTransformer
 from utils.util import state_dict_data_parallel_fix
 
 
-class FrozenInTimeIPU(BaseModel):
+class FrozenInTimeIPU(FrozenInTime):
     def __init__(self,
                  video_params,
                  text_params,
@@ -91,12 +91,10 @@ class FrozenInTimeIPU(BaseModel):
         # text_embeddings = self.compute_text(text_data)
         text_embeddings = self.compute_text(input_ids, attention_mask)
         video_embeddings = self.compute_video(video_data)
-        # TODO--
-        # if return_embeds:
-        #     return text_embeddings, video_embeddings
-
-        return sim_matrix(text_embeddings, video_embeddings)
-
+        if self.training:
+            return sim_matrix(text_embeddings, video_embeddings)
+        return text_embeddings, video_embeddings
+        
     def compute_text(self, input_ids, attention_mask):
         if self.text_params['model'].startswith('bert'):
             text_embeddings = self.text_model(input_ids, attention_mask=attention_mask)[
@@ -113,61 +111,4 @@ class FrozenInTimeIPU(BaseModel):
         video_embeddings = self.vid_proj(video_embeddings)
         return video_embeddings
 
-    def _inflate_positional_embeds(self, new_state_dict):
-        # allow loading of timesformer with fewer num_frames
-        curr_keys = list(self.state_dict().keys())
-        if 'video_model.temporal_embed' in new_state_dict and 'video_model.temporal_embed' in curr_keys:
-            load_temporal_embed = new_state_dict['video_model.temporal_embed']
-            load_num_frames = load_temporal_embed.shape[1]
-            curr_num_frames = self.video_params['num_frames']
-            embed_dim = load_temporal_embed.shape[2]
 
-            if load_num_frames != curr_num_frames:
-                if load_num_frames > curr_num_frames:
-                    print(f'### loaded {self.video_params["model"]} model has MORE frames than current...'
-                          f'### loading weights, filling in the extras via {self.load_temporal_fix}')
-                    new_temporal_embed = load_temporal_embed[:, :curr_num_frames, :]
-                else:
-                    print(f'### loaded {self.video_params["model"]} model has FEWER frames than current...'
-                          f'### loading weights, filling in the extras via {self.load_temporal_fix}')
-                    if self.load_temporal_fix == 'zeros':
-                        new_temporal_embed = torch.zeros([load_temporal_embed.shape[0], curr_num_frames, embed_dim])
-                        new_temporal_embed[:, :load_num_frames] = load_temporal_embed
-                    elif self.load_temporal_fix in ['interp', 'bilinear']:
-                        # interpolate
-                        # unsqueeze so pytorch thinks its an image
-                        mode = 'nearest'
-                        if self.load_temporal_fix == 'bilinear':
-                            mode = 'bilinear'
-                        load_temporal_embed = load_temporal_embed.unsqueeze(0)
-                        new_temporal_embed = F.interpolate(load_temporal_embed,
-                                                           (curr_num_frames, embed_dim), mode=mode).squeeze(0)
-                    else:
-                        raise NotImplementedError
-                new_state_dict['video_model.temporal_embed'] = new_temporal_embed
-        # allow loading with smaller spatial patches. assumes custom border crop, to append the
-        # border patches to the input sequence
-        if 'video_model.pos_embed' in new_state_dict and 'video_model.pos_embed' in curr_keys:
-            load_pos_embed = new_state_dict['video_model.pos_embed']
-            load_num_patches = load_pos_embed.shape[1]
-            curr_pos_embed = self.state_dict()['video_model.pos_embed']
-            if load_num_patches != curr_pos_embed.shape[1]:
-                raise NotImplementedError(
-                    'Loading models with different spatial resolution / patch number not yet implemented, sorry.')
-
-        return new_state_dict
-
-
-def sim_matrix(a, b, eps=1e-8):
-    """
-    added eps for numerical stability
-    """
-    a_n, b_n = a.norm(dim=1)[:, None], b.norm(dim=1)[:, None]
-    a_norm = a / torch.max(a_n, eps * torch.ones_like(a_n))
-    b_norm = b / torch.max(b_n, eps * torch.ones_like(b_n))
-    sim_mt = torch.mm(a_norm, b_norm.transpose(0, 1))
-    return sim_mt
-
-
-if __name__ == "__main__":
-    pass

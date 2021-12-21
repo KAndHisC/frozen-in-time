@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from tqdm.auto import tqdm
 
-from ipu import BaseTrainerIPU
+from ipu.base_trainer import BaseTrainerIPU
 from trainer import verbose, format_nested_metrics_for_writer
 from model.model import sim_matrix
 from utils import inf_loop
@@ -45,12 +45,30 @@ class TrainerIPU(BaseTrainerIPU):
 
         # TODO--
         self.model.half()
-        self.model.train()
+        
+        layers_on_ipu = [0,0,0,0,0,0]
+        for index, layer in enumerate(self.model.text_model.transformer.layer):
+            # ipu = layer_ipu[index]
+            # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
+            self.model.text_model.transformer.layer[index] = poptorch.BeginBlock(layer, f"text_encoder{index}", ipu_id=layers_on_ipu[index])
+            print(f"text_encoder {index:<2} --> IPU {layers_on_ipu[index]}")
+        self.model.txt_proj = poptorch.BeginBlock(self.model.txt_proj,"txt_proj",ipu_id=0)
+
+        layers_on_ipu = [1,1,1,1,2,2,2,2,3,3,3,3]
+        for index, layer in enumerate(self.model.video_model.blocks):
+            # ipu = layer_ipu[index]
+            # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
+            self.model.video_model.blocks[index] = poptorch.BeginBlock(layer, f"video_encoder{index}", ipu_id=layers_on_ipu[index])
+            print(f"video_encoder {index:<2} --> IPU {layers_on_ipu[index]}")
+        self.model.vid_proj = poptorch.BeginBlock(self.model.vid_proj,"vid_proj",ipu_id=3)
+
         opts = poptorch.Options()
+        opts.deviceIterations(4)
         poptimizer = poptorch.optim.AdamW(self.model.parameters(), lr=1e-5, betas=(0.98,0.9), weight_decay=0.2, accum_type=torch.float16) 
-        self.poptorch_model = poptorch.trainingModel(model,
+        self.training_model = poptorch.trainingModel(model,
                                         options=opts,
                                         optimizer=poptimizer)
+        self.inference_model = poptorch.inferenceModel(model.eval(),options=opts)
 
     def _eval_metrics(self, output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -93,9 +111,7 @@ class TrainerIPU(BaseTrainerIPU):
 
                     self.optimizer.zero_grad()
                     # text_embeds, video_embeds = self.model(data)
-                    text_embeds, video_embeds = self.poptorch_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
-                    exit()
-                    output = sim_matrix(text_embeds, video_embeds)
+                    output = self.training_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
                     loss = self.loss(output)
                     loss.backward()
                     self.optimizer.step()
@@ -137,6 +153,7 @@ class TrainerIPU(BaseTrainerIPU):
             The validation metrics in log must have the key 'val_metrics'.
         """
         self.model.eval()
+        self.inference_model.eval()
         total_val_loss = [0] * len(self.valid_data_loader)
         meta_arr = {x: [] for x in range(len(self.valid_data_loader))}
         text_embed_arr = {x: [] for x in range(len(self.valid_data_loader))}
@@ -167,9 +184,9 @@ class TrainerIPU(BaseTrainerIPU):
                         avoid_data_parallel = False
 
                     if avoid_data_parallel:
-                        text_embed, vid_embed = self.model.module(data, return_embeds=True)
+                        text_embed, vid_embed = self.model.module(data)
                     else:
-                        text_embed, vid_embed = self.model(data, return_embeds=True)
+                        text_embed, vid_embed = self.inference_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
 
                     text_embed_arr[dl_idx].append(text_embed.cpu())
                     vid_embed_arr[dl_idx].append(vid_embed.cpu())

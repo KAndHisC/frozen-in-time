@@ -6,13 +6,13 @@ import transformers
 from sacred import Experiment
 
 import data_loader.data_loader as module_data
-import model.loss as module_loss
+import ipu.loss as module_loss
 import model.metric as module_metric
-import model.model as module_arch
+import ipu.model as module_arch
 import utils.visualizer as module_vis
 from parse_config import ConfigParser
 # from trainer import Trainer
-from ipu import TrainerIPU
+from ipu.trainer import TrainerIPU
 from utils.util import replace_nested_dict_item
 
 ex = Experiment('train')
@@ -61,7 +61,6 @@ def run():
         writer = ex
     else:
         writer = None
-
     trainer = TrainerIPU(model, loss, metrics, optimizer,
                       config=config,
                       data_loader=data_loader,
