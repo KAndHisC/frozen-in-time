@@ -9,7 +9,7 @@ from model.video_transformer import SpaceTimeTransformer
 from utils.util import state_dict_data_parallel_fix
 
 
-class FrozenInTime(BaseModel):
+class FrozenInTimeIPU(BaseModel):
     def __init__(self,
                  video_params,
                  text_params,

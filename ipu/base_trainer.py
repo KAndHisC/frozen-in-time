@@ -4,7 +4,7 @@ import torch
 from numpy import inf
 
 
-class BaseTrainer:
+class BaseTrainerIPU(BaseTrainer):
     """
     Base class for all trainers
     """
@@ -77,8 +77,8 @@ class BaseTrainer:
         """
         not_improved_count = 0
         # TODO-- temply closed valid
-        # if self.init_val:
-        #     _ = self._valid_epoch(-1)
+        if self.init_val:
+            _ = self._valid_epoch(-1)
 
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)

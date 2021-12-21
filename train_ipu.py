@@ -61,16 +61,7 @@ def run():
         writer = ex
     else:
         writer = None
-    # trainer = Trainer(model, loss, metrics, optimizer,
-    #                   config=config,
-    #                   data_loader=data_loader,
-    #                   valid_data_loader=valid_data_loader,
-    #                   lr_scheduler=lr_scheduler,
-    #                   visualizer=visualizer,
-    #                   writer=writer,
-    #                   tokenizer=tokenizer,
-    #                   max_samples_per_epoch=config['trainer']['max_samples_per_epoch'])
-    # trainer.train()
+
     trainer = TrainerIPU(model, loss, metrics, optimizer,
                       config=config,
                       data_loader=data_loader,

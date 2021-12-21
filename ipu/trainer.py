@@ -3,13 +3,14 @@ import torch
 from torch import nn
 from tqdm.auto import tqdm
 
-from base import BaseTrainer
+from ipu import BaseTrainerIPU
+from trainer import verbose, format_nested_metrics_for_writer
 from model.model import sim_matrix
 from utils import inf_loop
 import poptorch
 
 
-class TrainerIPU(BaseTrainer):
+class TrainerIPU(BaseTrainerIPU):
     """
     Trainer class
 
@@ -224,17 +225,3 @@ class TrainerIPU(BaseTrainer):
         return base.format(current, total, 100.0 * current / total)
 
 
-def verbose(epoch, metrics, mode, name="TEST"):
-    r1, r5, r10, r50 = metrics["R1"], metrics["R5"], metrics["R10"], metrics["R50"]
-    msg = f"[{mode}]{name:s} epoch {epoch}, R@1: {r1:.1f}"
-    msg += f", R@5: {r5:.1f}, R@10 {r10:.1f}, R@50 {r50:.1f}"
-    msg += f"MedR: {metrics['MedR']:g}, MeanR: {metrics['MeanR']:.1f}"
-    print(msg)
-
-
-def format_nested_metrics_for_writer(metrics, mode, name="TEST"):
-    res = {}
-    for key, val in metrics.items():
-        log_name = f"[{mode}]{name}_{key}"
-        res[log_name] = val
-    return res
