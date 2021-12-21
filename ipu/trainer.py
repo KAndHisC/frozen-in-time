@@ -1,13 +1,14 @@
 import numpy as np
 import torch
 from torch import nn
-from tqdm.auto import tqdm
+from tqdm.autonotebook import tqdm
 
 from ipu.base_trainer import BaseTrainerIPU
 from trainer import verbose, format_nested_metrics_for_writer
 from model.model import sim_matrix
 from utils import inf_loop
 import poptorch
+from ipu import options
 
 
 class TrainerIPU(BaseTrainerIPU):
@@ -45,7 +46,7 @@ class TrainerIPU(BaseTrainerIPU):
 
         # TODO--
         self.model.half()
-        
+        opts = options.get_options()
         layers_on_ipu = [0,0,0,0,0,0]
         for index, layer in enumerate(self.model.text_model.transformer.layer):
             # ipu = layer_ipu[index]
@@ -62,13 +63,12 @@ class TrainerIPU(BaseTrainerIPU):
             print(f"video_encoder {index:<2} --> IPU {layers_on_ipu[index]}")
         self.model.vid_proj = poptorch.BeginBlock(self.model.vid_proj,"vid_proj",ipu_id=3)
 
-        opts = poptorch.Options()
-        opts.deviceIterations(4)
+        
         poptimizer = poptorch.optim.AdamW(self.model.parameters(), lr=1e-5, betas=(0.98,0.9), weight_decay=0.2, accum_type=torch.float16) 
-        self.training_model = poptorch.trainingModel(model,
+        self.training_model = poptorch.trainingModel(self.model,
                                         options=opts,
                                         optimizer=poptimizer)
-        self.inference_model = poptorch.inferenceModel(model.eval(),options=opts)
+        self.inference_model = poptorch.inferenceModel(self.model.eval(),options=opts)
 
     def _eval_metrics(self, output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -106,8 +106,8 @@ class TrainerIPU(BaseTrainerIPU):
                     if self.tokenizer is not None:
                         data['text'] = self.tokenizer(data['text'], return_tensors='pt', padding=True,
                                                       truncation=True)
-                    data['text'] = {key: val.to(self.device) for key, val in data['text'].items()}
-                    data['video'] = data['video'].to(self.device)
+                    # data['text'] = {key: val.to(self.device) for key, val in data['text'].items()}
+                    # data['video'] = data['video'].to(self.device)
 
                     self.optimizer.zero_grad()
                     # text_embeds, video_embeds = self.model(data)
@@ -167,26 +167,26 @@ class TrainerIPU(BaseTrainerIPU):
                     meta_arr[dl_idx].append(data['meta'])
                     if self.tokenizer is not None:
                         data['text'] = self.tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
-                    data['text'] = {key: val.to(self.device) for key, val in data['text'].items()}
-                    data['video'] = data['video'].to(self.device)
+                    # data['text'] = {key: val.to(self.device) for key, val in data['text'].items()}
+                    # data['video'] = data['video'].to(self.device)
 
                     # Note that if the batch is not scattered among all the GPUs, `DataParallel` will fail because
                     # the model's mandatory argument `data` will not be passed to some of them.
                     # It can happen with the last batch of the dataset, depending on its size.
                     # It could be safely ignored during training but on validation/test we want accurate metrics.
                     # This avoids using `DataParallel` in this case, and supposes this batch fits in one GPU.
-                    current_batch_size = data['video'].shape[0]
-                    if isinstance(self.model, nn.DataParallel) and current_batch_size < (dl.batch_size or 1):
-                        scattered_len = len(self.model.scatter([torch.empty(current_batch_size)], {},
-                                                               self.model.device_ids)[0])
-                        avoid_data_parallel = scattered_len < len(self.model.device_ids)
-                    else:
-                        avoid_data_parallel = False
+                    # current_batch_size = data['video'].shape[0]
+                    # if isinstance(self.model, nn.DataParallel) and current_batch_size < (dl.batch_size or 1):
+                    #     scattered_len = len(self.model.scatter([torch.empty(current_batch_size)], {},
+                    #                                            self.model.device_ids)[0])
+                    #     avoid_data_parallel = scattered_len < len(self.model.device_ids)
+                    # else:
+                    #     avoid_data_parallel = False
 
-                    if avoid_data_parallel:
-                        text_embed, vid_embed = self.model.module(data)
-                    else:
-                        text_embed, vid_embed = self.inference_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
+                    # if avoid_data_parallel:
+                    #     text_embed, vid_embed = self.model.module(data)
+                    # else:
+                    text_embed, vid_embed = self.inference_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
 
                     text_embed_arr[dl_idx].append(text_embed.cpu())
                     vid_embed_arr[dl_idx].append(vid_embed.cpu())
