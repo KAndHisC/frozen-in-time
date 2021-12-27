@@ -47,15 +47,15 @@ class TrainerIPU(BaseTrainerIPU):
         # TODO--
         self.model.half()
         opts = options.get_options()
-        layers_on_ipu = [0,0,0,0,0,0]
+        layers_on_ipu = [0,1,1,2,2,3]
         for index, layer in enumerate(self.model.text_model.transformer.layer):
             # ipu = layer_ipu[index]
             # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
             self.model.text_model.transformer.layer[index] = poptorch.BeginBlock(layer, f"text_encoder{index}", ipu_id=layers_on_ipu[index])
             print(f"text_encoder {index:<2} --> IPU {layers_on_ipu[index]}")
-        self.model.txt_proj = poptorch.BeginBlock(self.model.txt_proj,"txt_proj",ipu_id=0)
+        self.model.txt_proj = poptorch.BeginBlock(self.model.txt_proj,"txt_proj",ipu_id=3)
 
-        layers_on_ipu = [1,1,1,1,2,2,2,2,3,3,3,3]
+        layers_on_ipu = [0,0,0,1,1,1,2,2,2,3,3,3]
         for index, layer in enumerate(self.model.video_model.blocks):
             # ipu = layer_ipu[index]
             # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
