@@ -5,6 +5,11 @@
 *.pyc
 
 # exclude big data dir
-data/
-exps/
-reports/
+data
+
+# logs
+exps
+reports
+logs
+
+

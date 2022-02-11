@@ -84,14 +84,14 @@ class FrozenInTimeIPU(BaseModel):
     # def set_device(self, device):
     #     self.device = device
 
-    def forward(self, input_ids, attention_mask, video_data ):# return_embeds=True
+    def forward(self, input_ids, attention_mask, video):# return_embeds=True
 
         # text_data = data['text']
         # video_data = data['video']
 
         # text_embeddings = self.compute_text(text_data)
         text_embeddings = self.compute_text(input_ids, attention_mask)
-        video_embeddings = self.compute_video(video_data)
+        video_embeddings = self.compute_video(video)
         if self.training:
             return sim_matrix(text_embeddings, video_embeddings)
         return text_embeddings, video_embeddings
@@ -111,8 +111,6 @@ class FrozenInTimeIPU(BaseModel):
         video_embeddings = self.video_model(video_data)
         video_embeddings = self.vid_proj(video_embeddings)
         return video_embeddings
-
-
 
     def _inflate_positional_embeds(self, new_state_dict):
         # allow loading of timesformer with fewer num_frames

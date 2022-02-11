@@ -83,15 +83,15 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Shutter Image/Video Downloader')
-    parser.add_argument('--partitions', type=int, default=4,
+    parser.add_argument('--partitions', type=int, default=128,
                         help='Number of partitions to split the dataset into, to run multiple jobs in parallel')
     parser.add_argument('--part', type=int, required=True,
                         help='Partition number to download where 0 <= part < partitions')
     parser.add_argument('--data_dir', type=str, default='data/WebVid',
                         help='Directory where webvid data is stored.')
-    parser.add_argument('--csv_path', type=str, default='data/WebVid/release/results_2M_val.csv',
+    parser.add_argument('--csv_path', type=str, default='data/WebVid/release/results_2M_train.csv',
                         help='Path to csv data to download')
-    parser.add_argument('--processes', type=int, default=8)
+    parser.add_argument('--processes', type=int, default=16)
     args = parser.parse_args()
 
     if args.part >= args.partitions:

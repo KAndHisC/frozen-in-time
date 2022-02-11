@@ -5,7 +5,7 @@ import random
 import numpy as np
 import pandas as pd
 
-from base.base_dataset import TextVideoDataset
+from ipu.base_dataset import TextVideoDataset
 
 
 class MSRVTT(TextVideoDataset):

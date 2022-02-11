@@ -1,3 +1,4 @@
+import poptorch
 from poptorch import DataLoader
 import torch
 
@@ -74,13 +75,13 @@ class TextVideoDataLoader(DataLoader):
         # mode = poptorch.DataLoaderMode.Async if async_dataloader else poptorch.DataLoaderMode.Sync
         super().__init__(options.get_options(),
                         dataset,
-                        batch_size=batch_size ,
+                        batch_size=batch_size,
                         num_workers=num_workers,
                         shuffle=shuffle,
                         drop_last=not(isinstance(dataset, torch.utils.data.IterableDataset)),
                         persistent_workers = True,
                         auto_distributed_partitioning = not isinstance(dataset, torch.utils.data.IterableDataset),
                         worker_init_fn=None,
-                        # mode=mode,
+                        # mode=poptorch.DataLoaderMode.Async,
                         async_options={'load_indefinitely': True})
         self.dataset_name = dataset_name

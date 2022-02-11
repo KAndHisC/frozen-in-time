@@ -45,7 +45,7 @@ def run():
     print('Val dataset: ', [x.n_samples for x in valid_data_loader], ' samples')
     # build model architecture, then print to console
     model = config.initialize('arch', module_arch)
-    logger.info(model)
+    # logger.info(model)
 
     # get function handles of loss and metrics
     loss = config.initialize(name="loss", module=module_loss)

@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import torch
 from torch import nn
@@ -47,15 +48,15 @@ class TrainerIPU(BaseTrainerIPU):
         # TODO--
         self.model.half()
         opts = options.get_options()
-        layers_on_ipu = [0,1,1,2,2,3]
+        layers_on_ipu = [0,0,0,0,0,0]
         for index, layer in enumerate(self.model.text_model.transformer.layer):
             # ipu = layer_ipu[index]
             # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
             self.model.text_model.transformer.layer[index] = poptorch.BeginBlock(layer, f"text_encoder{index}", ipu_id=layers_on_ipu[index])
             print(f"text_encoder {index:<2} --> IPU {layers_on_ipu[index]}")
-        self.model.txt_proj = poptorch.BeginBlock(self.model.txt_proj,"txt_proj",ipu_id=3)
+        self.model.txt_proj = poptorch.BeginBlock(self.model.txt_proj,"txt_proj",ipu_id=0)
 
-        layers_on_ipu = [0,0,0,1,1,1,2,2,2,3,3,3]
+        layers_on_ipu = [0,1,1,1,1,2,2,2,2,3,3,3]
         for index, layer in enumerate(self.model.video_model.blocks):
             # ipu = layer_ipu[index]
             # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
@@ -69,6 +70,15 @@ class TrainerIPU(BaseTrainerIPU):
                                         options=opts,
                                         optimizer=poptimizer)
         self.inference_model = poptorch.inferenceModel(self.model.eval(),options=opts)
+        # Compile model
+        # log.logger.info("---------- Compilation Started ---------")
+        # start_compile = time.perf_counter()
+        # datum = data_loader[0][0]
+        # self.inference_model.compile(*datum)
+        # duration_compilation = time.perf_counter() - start_compile
+        # log.logger.info(f"Compiled model in {duration_compilation} secs")
+        # print((f"Compiled model in {duration_compilation} secs"))
+        # log.logger.info("---------------------------------------")
 
     def _eval_metrics(self, output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -160,13 +170,30 @@ class TrainerIPU(BaseTrainerIPU):
         vid_embed_arr = {x: [] for x in range(len(self.valid_data_loader))}
 
         with torch.no_grad():
+            # Compile model
+            # log.logger.info("---------- Compilation Started ---------")
+            start_compile = time.perf_counter()
+            datum = next(iter(self.valid_data_loader[0]))
+            text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
+            datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
+            self.inference_model.compile(**datum)
+            duration_compilation = time.perf_counter() - start_compile
+            # log.logger.info(f"Compiled model in {duration_compilation} secs")
+            print((f"Compiled model in {duration_compilation} secs"))
+            # log.logger.info("---------------------------------------")
+
             # for validation we switch the nested loop order, because alternate batches not needed...
             # ... and dataloaders can be of different length
             for dl_idx, dl in enumerate(self.valid_data_loader):
+                # for video, text, meta in tqdm(dl, desc=f"Validating dl{dl_idx}"):
                 for data in tqdm(dl, desc=f"Validating dl{dl_idx}"):
+                    # meta_arr[dl_idx].append(meta)
                     meta_arr[dl_idx].append(data['meta'])
+
                     if self.tokenizer is not None:
-                        data['text'] = self.tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
+                        text = self.tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
+                        # print(text['input_ids'].shape, text['attention_mask'].shape)
+                        # exit()
                     # data['text'] = {key: val.to(self.device) for key, val in data['text'].items()}
                     # data['video'] = data['video'].to(self.device)
 
@@ -186,7 +213,7 @@ class TrainerIPU(BaseTrainerIPU):
                     # if avoid_data_parallel:
                     #     text_embed, vid_embed = self.model.module(data)
                     # else:
-                    text_embed, vid_embed = self.inference_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
+                    text_embed, vid_embed = self.inference_model(text['input_ids'], text['attention_mask'], data['video'])
 
                     text_embed_arr[dl_idx].append(text_embed.cpu())
                     vid_embed_arr[dl_idx].append(vid_embed.cpu())

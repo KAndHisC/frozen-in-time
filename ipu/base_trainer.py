@@ -62,7 +62,7 @@ class BaseTrainerIPU(BaseTrainer):
 
         if self.init_val:
             _ = self._valid_epoch(-1)
-
+        exit()
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)
 
