@@ -8,7 +8,7 @@ from base import BaseModel
 from model.model import sim_matrix
 from ipu.video_transformer import SpaceTimeTransformer
 from utils.util import state_dict_data_parallel_fix
-
+import poptorch
 
 class FrozenInTimeIPU(BaseModel):
     def __init__(self,
@@ -20,6 +20,8 @@ class FrozenInTimeIPU(BaseModel):
                  load_temporal_fix='zeros'):
         super().__init__()
 
+        # TODO-- loss
+        self.loss = torch.nn.CrossEntropyLoss() # as default
         self.video_params = video_params
         self.text_params = text_params
         self.load_temporal_fix = load_temporal_fix
@@ -38,6 +40,11 @@ class FrozenInTimeIPU(BaseModel):
             vit_init = video_params.get('vit_init', 'imagenet-21k')
             if arch_config == 'base_patch16_224':
                 vit_model = timm.models.vision_transformer.vit_base_patch16_224(pretrained=pretrained)
+                model = SpaceTimeTransformer(num_frames=num_frames,
+                                            time_init=time_init,
+                                            attention_style=attention_style)
+            elif arch_config == 'base_patch32_224':
+                vit_model = timm.models.vision_transformer.vit_base_patch32_224(pretrained=pretrained)
                 model = SpaceTimeTransformer(num_frames=num_frames,
                                             time_init=time_init,
                                             attention_style=attention_style)
@@ -80,7 +87,7 @@ class FrozenInTimeIPU(BaseModel):
             new_state_dict = state_dict_data_parallel_fix(state_dict, self.state_dict())
             new_state_dict = self._inflate_positional_embeds(new_state_dict)
             self.load_state_dict(new_state_dict, strict=True)
-
+    
     # def set_device(self, device):
     #     self.device = device
 
@@ -92,9 +99,12 @@ class FrozenInTimeIPU(BaseModel):
         # text_embeddings = self.compute_text(text_data)
         text_embeddings = self.compute_text(input_ids, attention_mask)
         video_embeddings = self.compute_video(video)
+
+        results = (text_embeddings, video_embeddings)
+        
         if self.training:
-            return sim_matrix(text_embeddings, video_embeddings)
-        return text_embeddings, video_embeddings
+            return results, self.custom_loss(text_embeddings, video_embeddings)
+        return results
         
     def compute_text(self, input_ids, attention_mask):
         if self.text_params['model'].startswith('bert'):
@@ -111,6 +121,10 @@ class FrozenInTimeIPU(BaseModel):
         video_embeddings = self.video_model(video_data)
         video_embeddings = self.vid_proj(video_embeddings)
         return video_embeddings
+
+    def custom_loss(self, t_embd, v_embd):
+        sim_mtrx = sim_matrix(t_embd, v_embd)
+        return poptorch.identity_loss(self.loss(sim_mtrx), reduction='none')
 
     def _inflate_positional_embeds(self, new_state_dict):
         # allow loading of timesformer with fewer num_frames

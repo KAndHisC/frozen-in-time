@@ -23,7 +23,7 @@ class TrainerIPU(BaseTrainerIPU):
     def __init__(self, model, loss, metrics, optimizer, config, data_loader,
                  valid_data_loader=None, lr_scheduler=None, len_epoch=None, writer=None,
                  visualizer=None, tokenizer=None, max_samples_per_epoch=50000):
-        super().__init__(model, loss, metrics, optimizer, config, writer)
+        super().__init__(model, metrics, optimizer, config, writer)
         self.config = config
         self.data_loader = data_loader
         if len_epoch is None:
@@ -46,39 +46,58 @@ class TrainerIPU(BaseTrainerIPU):
         self.max_samples_per_epoch = max_samples_per_epoch
 
         # TODO--
-        self.model.half()
+        self.model = self.model.half()
         opts = options.get_options()
-        layers_on_ipu = [0,0,0,0,0,0]
+        layers_on_ipu = [0,0,1,1,1,1]
         for index, layer in enumerate(self.model.text_model.transformer.layer):
             # ipu = layer_ipu[index]
             # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
             self.model.text_model.transformer.layer[index] = poptorch.BeginBlock(layer, f"text_encoder{index}", ipu_id=layers_on_ipu[index])
             print(f"text_encoder {index:<2} --> IPU {layers_on_ipu[index]}")
-        self.model.txt_proj = poptorch.BeginBlock(self.model.txt_proj,"txt_proj",ipu_id=0)
+        self.model.txt_proj = poptorch.BeginBlock(self.model.txt_proj,"txt_proj",ipu_id=1)
 
-        layers_on_ipu = [0,1,1,1,1,2,2,2,2,3,3,3]
+        layers_on_ipu = [2,2,3,3,4,4,5,5,6,6,7,7]
         for index, layer in enumerate(self.model.video_model.blocks):
             # ipu = layer_ipu[index]
             # layer = RecomputationCheckpoint(layer) if config.recompute_checkpoint_every_layer else layer
             self.model.video_model.blocks[index] = poptorch.BeginBlock(layer, f"video_encoder{index}", ipu_id=layers_on_ipu[index])
             print(f"video_encoder {index:<2} --> IPU {layers_on_ipu[index]}")
-        self.model.vid_proj = poptorch.BeginBlock(self.model.vid_proj,"vid_proj",ipu_id=3)
+        self.model.vid_proj = poptorch.BeginBlock(self.model.vid_proj,"vid_proj",ipu_id=7)
 
-        
-        poptimizer = poptorch.optim.AdamW(self.model.parameters(), lr=1e-5, betas=(0.98,0.9), weight_decay=0.2, accum_type=torch.float16) 
+        self.model.loss = loss
+        self.loss = loss
+        print(self.model.loss)
+
         self.training_model = poptorch.trainingModel(self.model,
                                         options=opts,
-                                        optimizer=poptimizer)
-        self.inference_model = poptorch.inferenceModel(self.model.eval(),options=opts)
+                                        optimizer=optimizer)
         # Compile model
         # log.logger.info("---------- Compilation Started ---------")
-        # start_compile = time.perf_counter()
-        # datum = data_loader[0][0]
-        # self.inference_model.compile(*datum)
-        # duration_compilation = time.perf_counter() - start_compile
+        start_compile = time.perf_counter()
+        datum = next(iter(self.data_loader[0]))
+        text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
+        datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
+        self.training_model.compile(**datum)
+        duration_compilation = time.perf_counter() - start_compile
         # log.logger.info(f"Compiled model in {duration_compilation} secs")
-        # print((f"Compiled model in {duration_compilation} secs"))
+        print((f"Compiled training model in {duration_compilation} secs"))
         # log.logger.info("---------------------------------------")
+        
+        inf_opts = poptorch.Options()
+        inf_opts.deviceIterations(4)
+        # self.inference_model = self.model.eval()
+        self.inference_model = poptorch.inferenceModel(self.model.eval(),options=inf_opts)
+        # # Compile inference_model
+        # # log.logger.info("---------- Compilation Started ---------")
+        # start_compile = time.perf_counter()
+        # datum = next(iter(self.valid_data_loader[0]))
+        # text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
+        # datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
+        # self.inference_model.compile(**datum)
+        # duration_compilation = time.perf_counter() - start_compile
+        # # log.logger.info(f"Compiled model in {duration_compilation} secs")
+        # print((f"Compiled inference model in {duration_compilation} secs"))
+        # # log.logger.info("---------------------------------------")
 
     def _eval_metrics(self, output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -116,15 +135,13 @@ class TrainerIPU(BaseTrainerIPU):
                     if self.tokenizer is not None:
                         data['text'] = self.tokenizer(data['text'], return_tensors='pt', padding=True,
                                                       truncation=True)
-                    # data['text'] = {key: val.to(self.device) for key, val in data['text'].items()}
-                    # data['video'] = data['video'].to(self.device)
 
-                    self.optimizer.zero_grad()
+                    # self.optimizer.zero_grad()
                     # text_embeds, video_embeds = self.model(data)
-                    output = self.training_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
-                    loss = self.loss(output)
-                    loss.backward()
-                    self.optimizer.step()
+                    _, loss = self.training_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
+                    
+                    # loss.backward()
+                    # self.optimizer.step()
 
                     detached_loss = loss.detach().item()
 
@@ -170,18 +187,6 @@ class TrainerIPU(BaseTrainerIPU):
         vid_embed_arr = {x: [] for x in range(len(self.valid_data_loader))}
 
         with torch.no_grad():
-            # Compile model
-            # log.logger.info("---------- Compilation Started ---------")
-            start_compile = time.perf_counter()
-            datum = next(iter(self.valid_data_loader[0]))
-            text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
-            datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
-            self.inference_model.compile(**datum)
-            duration_compilation = time.perf_counter() - start_compile
-            # log.logger.info(f"Compiled model in {duration_compilation} secs")
-            print((f"Compiled model in {duration_compilation} secs"))
-            # log.logger.info("---------------------------------------")
-
             # for validation we switch the nested loop order, because alternate batches not needed...
             # ... and dataloaders can be of different length
             for dl_idx, dl in enumerate(self.valid_data_loader):
@@ -192,29 +197,8 @@ class TrainerIPU(BaseTrainerIPU):
 
                     if self.tokenizer is not None:
                         text = self.tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
-                        # print(text['input_ids'].shape, text['attention_mask'].shape)
-                        # exit()
-                    # data['text'] = {key: val.to(self.device) for key, val in data['text'].items()}
-                    # data['video'] = data['video'].to(self.device)
-
-                    # Note that if the batch is not scattered among all the GPUs, `DataParallel` will fail because
-                    # the model's mandatory argument `data` will not be passed to some of them.
-                    # It can happen with the last batch of the dataset, depending on its size.
-                    # It could be safely ignored during training but on validation/test we want accurate metrics.
-                    # This avoids using `DataParallel` in this case, and supposes this batch fits in one GPU.
-                    # current_batch_size = data['video'].shape[0]
-                    # if isinstance(self.model, nn.DataParallel) and current_batch_size < (dl.batch_size or 1):
-                    #     scattered_len = len(self.model.scatter([torch.empty(current_batch_size)], {},
-                    #                                            self.model.device_ids)[0])
-                    #     avoid_data_parallel = scattered_len < len(self.model.device_ids)
-                    # else:
-                    #     avoid_data_parallel = False
-
-                    # if avoid_data_parallel:
-                    #     text_embed, vid_embed = self.model.module(data)
-                    # else:
-                    text_embed, vid_embed = self.inference_model(text['input_ids'], text['attention_mask'], data['video'])
-
+                    results = self.inference_model(text['input_ids'], text['attention_mask'], data['video'])
+                    text_embed, vid_embed = results
                     text_embed_arr[dl_idx].append(text_embed.cpu())
                     vid_embed_arr[dl_idx].append(vid_embed.cpu())
                     sims_batch = sim_matrix(text_embed, vid_embed)

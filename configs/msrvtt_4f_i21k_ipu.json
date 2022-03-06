@@ -22,13 +22,34 @@
     },
     "data_loader": {
         "type": "TextVideoDataLoader",
-        "args":{
+        "train":{
             "dataset_name": "MSRVTT",
             "data_dir": "data/MSRVTT/",
             "shuffle": true,
             "num_workers": 64,
             "batch_size": 4,
             "split": "train",
+            "cut": "jsfusion",
+            "subsample": 1,
+            "text_params": {
+                "model": "distilbert-base-uncased",
+                "input": "text"
+            },
+            "video_params": {
+                "extraction_fps": 25,
+                "extraction_res": 256,
+                "input_res": 224,
+                "num_frames": 1,
+                "stride": 1
+            }
+        },
+        "test":{
+            "dataset_name": "MSRVTT",
+            "data_dir": "data/MSRVTT/",
+            "shuffle": true,
+            "num_workers": 64,
+            "batch_size": 4,
+            "split": "val",
             "cut": "jsfusion",
             "subsample": 1,
             "text_params": {
@@ -47,11 +68,14 @@
     "optimizer": {
         "type": "AdamW",
         "args":{
-            "lr": 3e-5
+            "lr": 3e-5,
+            "betas": [0.98,0.9],
+            "weight_decay": 0.2,
+            "accum_type": "torch.float16"
         }
     },
     "loss": {
-        "type": "NormSoftmaxLoss",
+        "type": "CrossEntropy",
         "args": {
         }
     },

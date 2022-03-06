@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
-
+import numpy as np
 
 class NormSoftmaxLoss(nn.Module):
     def __init__(self, temperature=0.05):
@@ -17,15 +17,19 @@ class NormSoftmaxLoss(nn.Module):
         j_logsm = F.log_softmax(x.t()/self.temperature, dim=1)
 
         # sum over positives
-        idiag = torch.diag(i_logsm)
+        # idiag = torch.diag(i_logsm)
+        idiag = self.diag(i_logsm)
         loss_i = idiag.sum() / len(idiag)
         # print(i_logsm.shape)
 
-        jdiag = torch.diag(j_logsm)
+        # jdiag = torch.diag(j_logsm)
+        jdiag = self.diag(j_logsm)
         loss_j = jdiag.sum() / len(jdiag)
 
         return - loss_i - loss_j
-
+    
+    def diag(self, x):
+        return (x * torch.eye(x.size()[0])).sum(-1)
 
 class MaxMarginRankingLoss(nn.Module):
 
@@ -70,6 +74,7 @@ class CrossEntropy(nn.Module):
         super().__init__()
         self.loss = nn.CrossEntropyLoss()
 
-    def forward(self, output, target):
-        return self.loss(output, target)
+    def forward(self, x):
+        labels = torch.Tensor(np.arange(x.size()[0])).long()
+        return self.loss(x, labels)+self.loss(x.t(), labels)/2.0
 

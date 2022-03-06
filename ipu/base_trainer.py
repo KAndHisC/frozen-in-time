@@ -8,7 +8,7 @@ class BaseTrainerIPU(BaseTrainer):
     """
     Base class for all trainers
     """
-    def __init__(self, model, loss, metrics, optimizer, config, writer=None, init_val=False):
+    def __init__(self, model, metrics, optimizer, config, writer=None, init_val=False):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
         self.init_val = init_val
@@ -20,8 +20,8 @@ class BaseTrainerIPU(BaseTrainer):
         # if len(device_ids) > 1:
         #     self.model = torch.nn.DataParallel(model, device_ids=device_ids)
 
-        # loss = loss.to(self.device)
-        self.loss = loss
+        # # loss = loss.to(self.device)
+        # self.loss = loss
         self.metrics = metrics
         self.optimizer = optimizer
 
@@ -62,7 +62,7 @@ class BaseTrainerIPU(BaseTrainer):
 
         if self.init_val:
             _ = self._valid_epoch(-1)
-        exit()
+        # exit()
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)
 

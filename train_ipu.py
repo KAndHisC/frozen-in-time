@@ -1,6 +1,7 @@
 import argparse
 import collections
 import os
+import torch
 
 import transformers
 from sacred import Experiment
@@ -52,7 +53,10 @@ def run():
     metrics = [getattr(module_metric, met) for met in config['metrics']]
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = config.initialize('optimizer', transformers, trainable_params)
+    # optimizer = config.initialize('optimizer', transformers, trainable_params)
+    config['optimizer']['args']['accum_type'] = torch.float16
+    config['optimizer']['args']['betas'] = tuple(config['optimizer']['args']['betas'])
+    optimizer = config.initialize('optimizer', poptorch.optim, trainable_params)
     lr_scheduler = None
     if 'lr_scheduler' in config._config:
         if hasattr(transformers, config._config['lr_scheduler']['type']):
@@ -79,10 +83,16 @@ def init_dataloaders(config, module_data):
     """
     We need a way to change split from 'train' to 'val'.
     """
-    if "type" in config["data_loader"] and "args" in config["data_loader"]:
+    # if "type" in config["data_loader"] and "args" in config["data_loader"]:
+    #     # then its a single dataloader
+    #     data_loader = [config.initialize("data_loader", module_data)]
+    #     config['data_loader']['args'] = replace_nested_dict_item(config['data_loader']['args'], 'split', 'val')
+    #     valid_data_loader = [config.initialize("data_loader", module_data)]
+    if "type" in config["data_loader"]:
         # then its a single dataloader
+        config['data_loader']['args'] = config['data_loader']['train'] 
         data_loader = [config.initialize("data_loader", module_data)]
-        config['data_loader']['args'] = replace_nested_dict_item(config['data_loader']['args'], 'split', 'val')
+        config['data_loader']['args'] = config['data_loader']['test'] 
         valid_data_loader = [config.initialize("data_loader", module_data)]
     elif isinstance(config["data_loader"], list):
         data_loader = [config.initialize('data_loader', module_data, index=idx) for idx in

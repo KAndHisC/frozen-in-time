@@ -26,7 +26,8 @@ export TMPDIR="/localdata/cn-customer-engineering/takiw/tmp"
 export POPART_LOG_LEVEL=WARN
 export POPTORCH_LOG_LEVEL=WARN
 export POPLAR_LOG_LEVEL=WARN
-export POPLAR_ENGINE_OPTIONS='{"autoReport.all":"true", "autoReport.directory":"./reports"}'
+export POPLAR_ENGINE_OPTIONS='{"autoReport.all":"true", "autoReport.directory":"./reports", "autoReport.streamAtEachRun":"false"}'
+export PVTI_OPTIONS='{"enable":"true", "directory":"./sys_report"}'
 
 source /home/tempscratch/takiw/sdk/poplar_sdk-ubuntu_18_04-2.4.0+856-d16ca54529/popart-ubuntu_18_04-2.4.0+2529-969064e2df/enable.sh
 source /home/tempscratch/takiw/sdk/poplar_sdk-ubuntu_18_04-2.4.0+856-d16ca54529/poplar-ubuntu_18_04-2.4.0+2529-969064e2df/enable.sh
@@ -35,6 +36,8 @@ EOF
 cat>$CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh<<EOF
 #!/bin/bash
 unset POPLAR_SDK_ENABLED
+unset POPLAR_ENGINE_OPTIONS
+unset PVTI_OPTIONS
 EOF
 
 conda install av   -c conda-forge
