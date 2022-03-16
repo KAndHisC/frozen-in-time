@@ -1,19 +1,22 @@
 import argparse
 import collections
 import os
+import torch
 
 import transformers
 from sacred import Experiment
 
-import data_loader.data_loader as module_data
-import model.loss as module_loss
+import ipu.data_loader as module_data
+import ipu.loss as module_loss
 import model.metric as module_metric
-import model.model as module_arch
+
 import utils.visualizer as module_vis
 from parse_config import ConfigParser
-# from trainer import Trainer
-from ipu import TrainerIPU
+
+import ipu.model as module_arch
+from ipu.trainer import TrainerIPU
 from utils.util import replace_nested_dict_item
+import poptorch
 
 ex = Experiment('train')
 
@@ -43,14 +46,17 @@ def run():
     print('Val dataset: ', [x.n_samples for x in valid_data_loader], ' samples')
     # build model architecture, then print to console
     model = config.initialize('arch', module_arch)
-    logger.info(model)
+    # logger.info(model)
 
     # get function handles of loss and metrics
     loss = config.initialize(name="loss", module=module_loss)
     metrics = [getattr(module_metric, met) for met in config['metrics']]
     # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = config.initialize('optimizer', transformers, trainable_params)
+    # optimizer = config.initialize('optimizer', transformers, trainable_params)
+    config['optimizer']['args']['accum_type'] = torch.float16
+    config['optimizer']['args']['betas'] = tuple(config['optimizer']['args']['betas'])
+    optimizer = config.initialize('optimizer', poptorch.optim, trainable_params)
     lr_scheduler = None
     if 'lr_scheduler' in config._config:
         if hasattr(transformers, config._config['lr_scheduler']['type']):
@@ -61,16 +67,6 @@ def run():
         writer = ex
     else:
         writer = None
-    # trainer = Trainer(model, loss, metrics, optimizer,
-    #                   config=config,
-    #                   data_loader=data_loader,
-    #                   valid_data_loader=valid_data_loader,
-    #                   lr_scheduler=lr_scheduler,
-    #                   visualizer=visualizer,
-    #                   writer=writer,
-    #                   tokenizer=tokenizer,
-    #                   max_samples_per_epoch=config['trainer']['max_samples_per_epoch'])
-    # trainer.train()
     trainer = TrainerIPU(model, loss, metrics, optimizer,
                       config=config,
                       data_loader=data_loader,
@@ -87,10 +83,16 @@ def init_dataloaders(config, module_data):
     """
     We need a way to change split from 'train' to 'val'.
     """
-    if "type" in config["data_loader"] and "args" in config["data_loader"]:
+    # if "type" in config["data_loader"] and "args" in config["data_loader"]:
+    #     # then its a single dataloader
+    #     data_loader = [config.initialize("data_loader", module_data)]
+    #     config['data_loader']['args'] = replace_nested_dict_item(config['data_loader']['args'], 'split', 'val')
+    #     valid_data_loader = [config.initialize("data_loader", module_data)]
+    if "type" in config["data_loader"]:
         # then its a single dataloader
+        config['data_loader']['args'] = config['data_loader']['train'] 
         data_loader = [config.initialize("data_loader", module_data)]
-        config['data_loader']['args'] = replace_nested_dict_item(config['data_loader']['args'], 'split', 'val')
+        config['data_loader']['args'] = config['data_loader']['test'] 
         valid_data_loader = [config.initialize("data_loader", module_data)]
     elif isinstance(config["data_loader"], list):
         data_loader = [config.initialize('data_loader', module_data, index=idx) for idx in

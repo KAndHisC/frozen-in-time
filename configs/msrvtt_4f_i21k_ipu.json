@@ -1,0 +1,102 @@
+{
+    "name": "MSRVTTjsfusion_4f_stformer_pt-im21k",
+    "n_gpu": 1,
+    "arch": {
+        "type": "FrozenInTimeIPU",
+        "args": {
+            "video_params": {
+                "model": "SpaceTimeTransformer",
+                "arch_config": "base_patch16_224",
+                "num_frames": 4,
+                "pretrained": true,
+                "time_init": "zeros"
+            },
+            "text_params": {
+                "model": "distilbert-base-uncased",
+                "pretrained": true,
+                "input": "text"
+            },
+            "projection": "minimal",
+            "load_checkpoint" : ""
+        }
+    },
+    "data_loader": {
+        "type": "TextVideoDataLoader",
+        "train":{
+            "dataset_name": "MSRVTT",
+            "data_dir": "data/MSRVTT/",
+            "shuffle": true,
+            "num_workers": 64,
+            "batch_size": 4,
+            "split": "train",
+            "cut": "jsfusion",
+            "subsample": 1,
+            "text_params": {
+                "model": "distilbert-base-uncased",
+                "input": "text"
+            },
+            "video_params": {
+                "extraction_fps": 25,
+                "extraction_res": 256,
+                "input_res": 224,
+                "num_frames": 1,
+                "stride": 1
+            }
+        },
+        "test":{
+            "dataset_name": "MSRVTT",
+            "data_dir": "data/MSRVTT/",
+            "shuffle": true,
+            "num_workers": 64,
+            "batch_size": 4,
+            "split": "val",
+            "cut": "jsfusion",
+            "subsample": 1,
+            "text_params": {
+                "model": "distilbert-base-uncased",
+                "input": "text"
+            },
+            "video_params": {
+                "extraction_fps": 25,
+                "extraction_res": 256,
+                "input_res": 224,
+                "num_frames": 4,
+                "stride": 1
+            }
+        }
+    },
+    "optimizer": {
+        "type": "AdamW",
+        "args":{
+            "lr": 3e-5,
+            "betas": [0.98,0.9],
+            "weight_decay": 0.2,
+            "accum_type": "torch.float16"
+        }
+    },
+    "loss": {
+        "type": "CrossEntropy",
+        "args": {
+        }
+    },
+    "metrics": [
+        "t2v_metrics",
+        "v2t_metrics"
+     ],
+    "trainer": {
+        "epochs": 100,
+        "max_samples_per_epoch": 9000,
+        "save_dir": "exps",
+        "save_period": 5,
+        "verbosity": 2,
+        "monitor": "min val_loss_0",
+        "early_stop": 10,
+        "neptune": false
+    },
+    "visualizer": {
+        "type": "",
+        "args": {
+        }
+    }
+
+}

@@ -6,4 +6,11 @@
 
 # exclude big data dir
 data
+
+# logs
 exps
+reports
+logs
+sys_report
+
+
