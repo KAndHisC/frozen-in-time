@@ -1,0 +1,2 @@
+,
+            "backlog_load_checkpoint" : "/localdata/workspace/frozen-in-time/exps/official_models/cc-webvid2m-4f_stformer_b_16_224.pth.tar"
