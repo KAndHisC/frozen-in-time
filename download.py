@@ -9,11 +9,11 @@ from tqdm import tqdm
 
 def request_save(url, save_fp):
     try:
-        if os.path.isfile(save_fp) and os.path.getsize(save_fp)>100000:
+        if os.path.isfile(save_fp) and os.path.getsize(save_fp)>50000:
             # imgs, idxs = video_reader(video_fp)
             pass
         else:
-            img_data = requests.get(url, timeout=5).content
+            img_data = requests.get(url, timeout=10).content
             with open(save_fp, 'wb') as handler:
                 handler.write(img_data)
                 print(f'Video re-downloaded {save_fp}')
@@ -99,7 +99,7 @@ if __name__ == "__main__":
                         help='Partition number to download where 0 <= part < partitions')
     parser.add_argument('--data_dir', type=str, default='data/WebVid',
                         help='Directory where webvid data is stored.')
-    parser.add_argument('--csv_path', type=str, default='data/WebVid/release/results_2M_train.csv',
+    parser.add_argument('--csv_path', type=str, default='data/WebVid/release/results_2M_val.csv',
                         help='Path to csv data to download')
     parser.add_argument('--processes', type=int, default=16)
     args = parser.parse_args()

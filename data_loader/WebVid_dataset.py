@@ -24,8 +24,8 @@ class WebVid(TextVideoDataset):
 
         if self.subsample < 1:
             metadata = metadata.sample(frac=self.subsample)
-        elif self.split == 'val':
-            metadata = metadata.sample(1000, random_state=0)  # 15k val is unnecessarily large, downsample.
+        # elif self.split == 'val':
+        #     metadata = metadata.sample(1000, random_state=0)  # 15k val is unnecessarily large, downsample.
 
         metadata['caption'] = metadata['name']
         del metadata['name']
