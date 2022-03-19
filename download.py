@@ -8,9 +8,18 @@ from tqdm import tqdm
 
 
 def request_save(url, save_fp):
-    img_data = requests.get(url, timeout=5).content
-    with open(save_fp, 'wb') as handler:
-        handler.write(img_data)
+    try:
+        if os.path.isfile(save_fp) and os.path.getsize(save_fp)>100000:
+            # imgs, idxs = video_reader(video_fp)
+            pass
+        else:
+            img_data = requests.get(url, timeout=5).content
+            with open(save_fp, 'wb') as handler:
+                handler.write(img_data)
+                print(f'Video re-downloaded {save_fp}')
+    except Exception as e:
+        raise ValueError(
+            f'Video loading failed for {save_fp}, video loading for this dataset is strict.') from e
 
 
 def main(args):
@@ -48,7 +57,8 @@ def main(args):
     # df[df.isnull().values==True]
     df = df.dropna(axis=0,how='any')
     print(len(df)-l)
-
+    # print(len(exists))
+    # exit()
     df['rel_fn'] = df.apply(lambda x: os.path.join(x['page_dir'], str(x['videoid'])),
                             axis=1)
 
@@ -75,7 +85,7 @@ def main(args):
                 urls_todo.append(row['contentUrl'])
                 save_fps.append(video_fp)
 
-            print(f'Spawning {len(urls_todo)} jobs for page {page_dir}')
+            # print(f'Spawning {len(urls_todo)} jobs for page {page_dir}')
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.processes) as executor:
                 future_to_url = {executor.submit(request_save, url, fp) for url, fp in zip(urls_todo, save_fps)}
             # request_save(urls_todo[0], save_fps[0])
@@ -83,7 +93,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Shutter Image/Video Downloader')
-    parser.add_argument('--partitions', type=int, default=128,
+    parser.add_argument('--partitions', type=int, default=1,
                         help='Number of partitions to split the dataset into, to run multiple jobs in parallel')
     parser.add_argument('--part', type=int, required=True,
                         help='Partition number to download where 0 <= part < partitions')
@@ -97,3 +107,4 @@ if __name__ == "__main__":
     if args.part >= args.partitions:
         raise ValueError("Part idx must be less than number of partitions")
     main(args)
+    # nohup python download.py --part 0 > logs/train_download.log 2>&1 &

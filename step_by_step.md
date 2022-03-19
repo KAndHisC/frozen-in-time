@@ -50,3 +50,6 @@ pip install --upgrade  torchvision
 
 
 python train_ipu.py --config configs/msrvtt_4f_i21k_ipu.json
+
+nohup python train.py --config configs/msrvtt_4f_i21k-1v100.json  > logs/train_msrvtt.log 2>&1 &
+nohup python train.py --config configs/webvid2m-pt-i2-1v100.json  > logs/train_webvid.log 2>&1 &
