@@ -71,17 +71,17 @@ class TrainerIPU(BaseTrainerIPU):
         self.training_model = poptorch.trainingModel(self.model,
                                         options=train_opts,
                                         optimizer=optimizer)
-        # Compile model
-        # log.logger.info("---------- Compilation Started ---------")
-        start_compile = time.perf_counter()
-        datum = next(iter(self.data_loader))
-        text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
-        datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
-        self.training_model.compile(**datum)
-        duration_compilation = time.perf_counter() - start_compile
-        # log.logger.info(f"Compiled model in {duration_compilation} secs")
-        print((f"Compiled training model in {duration_compilation} secs"))
-        # log.logger.info("---------------------------------------")
+        # # Compile model
+        # # log.logger.info("---------- Compilation Started ---------")
+        # start_compile = time.perf_counter()
+        # datum = next(iter(self.data_loader))
+        # text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
+        # datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
+        # self.training_model.compile(**datum)
+        # duration_compilation = time.perf_counter() - start_compile
+        # # log.logger.info(f"Compiled model in {duration_compilation} secs")
+        # print((f"Compiled training model in {duration_compilation} secs"))
+        # # log.logger.info("---------------------------------------")
         
         
         inf_opts = options.get_inf_opts()
@@ -151,10 +151,7 @@ class TrainerIPU(BaseTrainerIPU):
 
                 progress.set_postfix({"loss": detached_loss})
 
-                self.optimizer.zero_grad()
-
-                if batch_idx == self.len_epoch:
-                    break
+                # self.optimizer.zero_grad()
 
         log = {f'loss:': total_loss / self.len_epoch}
 

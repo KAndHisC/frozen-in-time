@@ -110,7 +110,7 @@ if __name__ == '__main__':
     ]
     config = ConfigParser(args, options)
     ex.add_config(config._config)
-    print(config)
+    # print(config)
 
     if config['trainer']['neptune']:
         # delete this error if you have added your own neptune credentials neptune.ai

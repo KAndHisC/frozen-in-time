@@ -225,7 +225,8 @@ class SpaceTimeTransformer(nn.Module):
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.num_frames = num_frames
         self.embed_dim = embed_dim
-        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        # norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6) # TODO--
+        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-5)
         print("######USING ATTENTION STYLE: ", attention_style)
         if hybrid_backbone is not None:
             raise NotImplementedError('hybrid backbone not implemented')

@@ -82,7 +82,7 @@ class TextVideoDataLoader(DataLoader):
                         batch_size=batch_size,
                         num_workers=num_workers,
                         shuffle=shuffle,
-                        drop_last=not(isinstance(dataset, torch.utils.data.IterableDataset)),
+                        drop_last=True,
                         persistent_workers = True,
                         auto_distributed_partitioning = not isinstance(dataset, torch.utils.data.IterableDataset),
                         worker_init_fn=None,

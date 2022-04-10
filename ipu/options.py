@@ -9,7 +9,7 @@ opts.Precision.enableFloatingPointExceptions(True)
 opts.outputMode(poptorch.OutputMode.All)
 
 inf_opts = poptorch.Options()
-inf_opts.deviceIterations(4)
+inf_opts.deviceIterations(8)
 inf_opts.Precision.enableFloatingPointExceptions(True)
 def get_train_opts():
     return opts

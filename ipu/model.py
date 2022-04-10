@@ -123,7 +123,7 @@ class FrozenInTimeIPU(BaseModel):
         return video_embeddings
 
     def custom_loss(self, t_embd, v_embd):
-        sim_mtrx = sim_matrix(t_embd, v_embd)
+        sim_mtrx = sim_matrix(t_embd, v_embd, eps=1e-5) # TODO--
         return poptorch.identity_loss(self.loss(sim_mtrx), reduction='none')
 
     def _inflate_positional_embeds(self, new_state_dict):
