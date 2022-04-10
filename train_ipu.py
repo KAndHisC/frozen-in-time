@@ -5,6 +5,7 @@ import torch
 
 import transformers
 from sacred import Experiment
+# from sacred.observers import NeptuneObserver
 
 import ipu.data_loader as module_data
 import ipu.loss as module_loss
@@ -42,8 +43,8 @@ def run():
 
     # setup data_loader instances
     data_loader, valid_data_loader = init_dataloaders(config, module_data)
-    print('Train dataset: ', [x.n_samples for x in data_loader], ' samples')
-    print('Val dataset: ', [x.n_samples for x in valid_data_loader], ' samples')
+    print('Train dataset: ', data_loader.n_samples, ' samples')
+    print('Val dataset: ', valid_data_loader.n_samples, ' samples')
     # build model architecture, then print to console
     model = config.initialize('arch', module_arch)
     # logger.info(model)
@@ -83,29 +84,10 @@ def init_dataloaders(config, module_data):
     """
     We need a way to change split from 'train' to 'val'.
     """
-    # if "type" in config["data_loader"] and "args" in config["data_loader"]:
-    #     # then its a single dataloader
-    #     data_loader = [config.initialize("data_loader", module_data)]
-    #     config['data_loader']['args'] = replace_nested_dict_item(config['data_loader']['args'], 'split', 'val')
-    #     valid_data_loader = [config.initialize("data_loader", module_data)]
-    if "type" in config["data_loader"]:
-        # then its a single dataloader
-        config['data_loader']['args'] = config['data_loader']['train'] 
-        data_loader = [config.initialize("data_loader", module_data)]
-        config['data_loader']['args'] = config['data_loader']['test'] 
-        valid_data_loader = [config.initialize("data_loader", module_data)]
-    elif isinstance(config["data_loader"], list):
-        data_loader = [config.initialize('data_loader', module_data, index=idx) for idx in
-                       range(len(config['data_loader']))]
-        new_cfg_li = []
-        for dl_cfg in config['data_loader']:
-            dl_cfg['args'] = replace_nested_dict_item(dl_cfg['args'], 'split', 'val')
-            new_cfg_li.append(dl_cfg)
-        config._config['data_loader'] = new_cfg_li
-        valid_data_loader = [config.initialize('data_loader', module_data, index=idx) for idx in
-                             range(len(config['data_loader']))]
-    else:
-        raise ValueError("Check data_loader config, not correct format.")
+    config['data_loader']['args'] = config['data_loader']['train'] 
+    data_loader = config.initialize("data_loader", module_data)
+    config['data_loader']['args'] = config['data_loader']['test'] 
+    valid_data_loader = config.initialize("data_loader", module_data)
 
     return data_loader, valid_data_loader
 
@@ -128,6 +110,7 @@ if __name__ == '__main__':
     ]
     config = ConfigParser(args, options)
     ex.add_config(config._config)
+    print(config)
 
     if config['trainer']['neptune']:
         # delete this error if you have added your own neptune credentials neptune.ai

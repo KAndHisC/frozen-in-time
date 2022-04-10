@@ -73,7 +73,11 @@ class TextVideoDataLoader(DataLoader):
         self.batch_idx = 0
         self.n_samples = len(dataset)
         # mode = poptorch.DataLoaderMode.Async if async_dataloader else poptorch.DataLoaderMode.Sync
-        super().__init__(options.get_options(),
+        if split == 'val':
+           ipu_opts = options.get_inf_opts()
+        else:
+            ipu_opts = options.get_train_opts()
+        super().__init__(ipu_opts,
                         dataset,
                         batch_size=batch_size,
                         num_workers=num_workers,

@@ -12,24 +12,25 @@ class NormSoftmaxLoss(nn.Module):
     def forward(self, x):
         "Assumes input x is similarity matrix of N x M \in [-1, 1], computed using the cosine similarity between normalised vectors"
         # TODO--
-        x = x.float()
+        # x = x.float()
         i_logsm = F.log_softmax(x/self.temperature, dim=1)
         j_logsm = F.log_softmax(x.t()/self.temperature, dim=1)
 
         # sum over positives
         # idiag = torch.diag(i_logsm)
         idiag = self.diag(i_logsm)
-        loss_i = idiag.sum() / len(idiag)
+        loss_i = idiag.sum() / idiag.shape[0]
         # print(i_logsm.shape)
 
         # jdiag = torch.diag(j_logsm)
         jdiag = self.diag(j_logsm)
-        loss_j = jdiag.sum() / len(jdiag)
+        loss_j = jdiag.sum() / jdiag.shape[0]
 
         return - loss_i - loss_j
     
     def diag(self, x):
-        return (x * torch.eye(x.size()[0])).sum(-1)
+        eyes = torch.eye(x.shape[0])
+        return torch.sum( x * eyes,dim=-1)
 
 class MaxMarginRankingLoss(nn.Module):
 

@@ -29,7 +29,7 @@ class TrainerIPU(BaseTrainerIPU):
         if len_epoch is None:
             # epoch-based training
             # take the min
-            self.len_epoch = min(len(x) for x in data_loader)
+            self.len_epoch = len(data_loader)
         else:
             # iteration-based training
             self.data_loader = inf_loop(data_loader)
@@ -40,14 +40,14 @@ class TrainerIPU(BaseTrainerIPU):
         self.lr_scheduler = lr_scheduler
         self.visualizer = visualizer
         self.val_chunking = True
-        self.batch_size = self.data_loader[0].batch_size
-        self.total_batch_sum = sum(x.batch_size for x in self.data_loader)
+        self.batch_size = self.data_loader.batch_size
+        self.total_batch_sum = self.data_loader.batch_size
         self.tokenizer = tokenizer
         self.max_samples_per_epoch = max_samples_per_epoch
 
         # TODO--
         self.model = self.model.half()
-        opts = options.get_options()
+        train_opts = options.get_train_opts()
         layers_on_ipu = [0,0,1,1,1,1]
         for index, layer in enumerate(self.model.text_model.transformer.layer):
             # ipu = layer_ipu[index]
@@ -69,12 +69,12 @@ class TrainerIPU(BaseTrainerIPU):
         print(self.model.loss)
 
         self.training_model = poptorch.trainingModel(self.model,
-                                        options=opts,
+                                        options=train_opts,
                                         optimizer=optimizer)
         # Compile model
         # log.logger.info("---------- Compilation Started ---------")
         start_compile = time.perf_counter()
-        datum = next(iter(self.data_loader[0]))
+        datum = next(iter(self.data_loader))
         text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
         datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
         self.training_model.compile(**datum)
@@ -83,21 +83,20 @@ class TrainerIPU(BaseTrainerIPU):
         print((f"Compiled training model in {duration_compilation} secs"))
         # log.logger.info("---------------------------------------")
         
-        inf_opts = poptorch.Options()
-        inf_opts.deviceIterations(4)
-        # self.inference_model = self.model.eval()
+        
+        inf_opts = options.get_inf_opts()
         self.inference_model = poptorch.inferenceModel(self.model.eval(),options=inf_opts)
-        # # Compile inference_model
-        # # log.logger.info("---------- Compilation Started ---------")
-        # start_compile = time.perf_counter()
-        # datum = next(iter(self.valid_data_loader[0]))
-        # text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
-        # datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
-        # self.inference_model.compile(**datum)
-        # duration_compilation = time.perf_counter() - start_compile
-        # # log.logger.info(f"Compiled model in {duration_compilation} secs")
-        # print((f"Compiled inference model in {duration_compilation} secs"))
-        # # log.logger.info("---------------------------------------")
+        # Compile inference_model
+        # log.logger.info("---------- Compilation Started ---------")
+        start_compile = time.perf_counter()
+        datum = next(iter(self.valid_data_loader))
+        text = self.tokenizer(datum['text'], return_tensors='pt', padding=True, truncation=True)
+        datum = {'input_ids':text['input_ids'], 'attention_mask':text['attention_mask'], 'video':datum['video']}
+        self.inference_model.compile(**datum)
+        duration_compilation = time.perf_counter() - start_compile
+        # log.logger.info(f"Compiled model in {duration_compilation} secs")
+        print((f"Compiled inference model in {duration_compilation} secs"))
+        # log.logger.info("---------------------------------------")
 
     def _eval_metrics(self, output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -123,43 +122,41 @@ class TrainerIPU(BaseTrainerIPU):
 
             The metrics in log must have the key 'metrics'.
         """
+        
         self.model.train()
-        total_loss = [0] * len(self.data_loader)
+        total_loss = 0
         total_iterations = self.max_samples_per_epoch // self.total_batch_sum + 1
-        with tqdm(zip(*self.data_loader), desc=f"Training epoch {epoch}", total=total_iterations) as progress:
-            for batch_idx, data_li in enumerate(progress):
-                if (batch_idx + 1) * self.total_batch_sum > self.max_samples_per_epoch:
-                    break
-                for dl_idx, data in enumerate(data_li):
-                    # then assume we must tokenize the input, e.g. its a string
-                    if self.tokenizer is not None:
-                        data['text'] = self.tokenizer(data['text'], return_tensors='pt', padding=True,
-                                                      truncation=True)
+        with tqdm(self.data_loader, desc=f"Training epoch {epoch}", total=total_iterations) as progress:
+            for data  in progress:
+                # if (batch_idx + 1) * self.total_batch_sum > self.max_samples_per_epoch:
+                #     break
+                # then assume we must tokenize the input, e.g. its a string
+                if self.tokenizer is not None:
+                    data['text'] = self.tokenizer(data['text'], return_tensors='pt', padding=True,
+                                                    truncation=True)
 
-                    # self.optimizer.zero_grad()
-                    # text_embeds, video_embeds = self.model(data)
-                    _, loss = self.training_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
-                    
-                    # loss.backward()
-                    # self.optimizer.step()
+                # self.optimizer.zero_grad()
+                # text_embeds, video_embeds = self.model(data)
+                _, loss = self.training_model(data['text']['input_ids'], data['text']['attention_mask'], data['video'])
+                
+                # loss.backward()
+                # self.optimizer.step()
 
-                    detached_loss = loss.detach().item()
+                detached_loss = loss.detach().item()
 
-                    if self.writer is not None:
-                        self.writer.log_scalar(f'loss_train_{dl_idx}', detached_loss)
+                if self.writer is not None:
+                    self.writer.log_scalar('loss_train', detached_loss)
 
-                    total_loss[dl_idx] += detached_loss
+                total_loss += detached_loss
 
-                    progress.set_postfix({"dl": dl_idx, "loss": detached_loss})
+                progress.set_postfix({"loss": detached_loss})
 
-                    self.optimizer.zero_grad()
+                self.optimizer.zero_grad()
 
                 if batch_idx == self.len_epoch:
                     break
 
-        log = {
-            f'loss_{dl_idx}': total_loss[dl_idx] / self.len_epoch for dl_idx in range(len(self.data_loader))
-        }
+        log = {f'loss:': total_loss / self.len_epoch}
 
         if self.do_validation:
             val_log = self._valid_epoch(epoch)
@@ -167,7 +164,7 @@ class TrainerIPU(BaseTrainerIPU):
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
-
+        # self.training_model.detachFromDevice()
         return log
 
     def _valid_epoch(self, epoch):
@@ -181,65 +178,61 @@ class TrainerIPU(BaseTrainerIPU):
         """
         self.model.eval()
         self.inference_model.eval()
-        total_val_loss = [0] * len(self.valid_data_loader)
-        meta_arr = {x: [] for x in range(len(self.valid_data_loader))}
-        text_embed_arr = {x: [] for x in range(len(self.valid_data_loader))}
-        vid_embed_arr = {x: [] for x in range(len(self.valid_data_loader))}
+        total_val_loss = 0
+        meta_arr = []
+        text_embed_arr = []
+        vid_embed_arr = []
 
         with torch.no_grad():
             # for validation we switch the nested loop order, because alternate batches not needed...
             # ... and dataloaders can be of different length
-            for dl_idx, dl in enumerate(self.valid_data_loader):
-                # for video, text, meta in tqdm(dl, desc=f"Validating dl{dl_idx}"):
-                for data in tqdm(dl, desc=f"Validating dl{dl_idx}"):
-                    # meta_arr[dl_idx].append(meta)
-                    meta_arr[dl_idx].append(data['meta'])
+            for data in tqdm(self.valid_data_loader, desc=f"Validating"):
+                # meta_arr[dl_idx].append(meta)
+                meta_arr.append(data['meta'])
+                if self.tokenizer is not None:
+                    text = self.tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
+                results = self.inference_model(text['input_ids'], text['attention_mask'], data['video'])
+                text_embed, vid_embed = results
+                text_embed_arr.append(text_embed.cpu())
+                vid_embed_arr.append(vid_embed.cpu())
+                sims_batch = sim_matrix(text_embed, vid_embed)
+                loss = self.loss(sims_batch)
+                total_val_loss += loss.item()
 
-                    if self.tokenizer is not None:
-                        text = self.tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
-                    results = self.inference_model(text['input_ids'], text['attention_mask'], data['video'])
-                    text_embed, vid_embed = results
-                    text_embed_arr[dl_idx].append(text_embed.cpu())
-                    vid_embed_arr[dl_idx].append(vid_embed.cpu())
-                    sims_batch = sim_matrix(text_embed, vid_embed)
-                    loss = self.loss(sims_batch)
-                    total_val_loss[dl_idx] += loss.item()
+        
+        # TODO: this needs a clean
+        if self.writer is not None:
+            self.writer.log_scalar(f'loss_val', total_val_loss / len(self.valid_data_loader))
+        nested_metrics = {} 
 
-        for dl_idx in range(len(self.valid_data_loader)):
-            # TODO: this needs a clean
+        text_embeds = torch.cat(text_embed_arr)
+        vid_embeds = torch.cat(vid_embed_arr)
+        sims = sim_matrix(text_embeds, vid_embeds).detach().cpu().numpy()
+
+        for metric in self.metrics:
+            metric_name = metric.__name__
+            res = metric(sims)
+            verbose(epoch=epoch, metrics=res, name=self.valid_data_loader.dataset_name,
+                    mode=metric_name)
+            nested_metrics[metric_name] = res
+
             if self.writer is not None:
-                self.writer.log_scalar(f'loss_val_{dl_idx}',
-                                       total_val_loss[dl_idx] / len(self.valid_data_loader[dl_idx]))
-            nested_metrics = {x: {} for x in range(len(self.valid_data_loader))}
+                to_write = format_nested_metrics_for_writer(res, mode=metric_name,
+                                                            name=self.valid_data_loader.dataset_name)
+                for key, val in to_write.items():
+                    self.writer.log_scalar(key, val)
 
-            text_embeds = torch.cat(text_embed_arr[dl_idx])
-            vid_embeds = torch.cat(vid_embed_arr[dl_idx])
-            sims = sim_matrix(text_embeds, vid_embeds).detach().cpu().numpy()
+            if self.visualizer is not None:
+                meta_arr_cat = {key: [] for key in meta_arr[0]}
+                for meta in meta_arr:
+                    for key, val in meta.items():
+                        meta_arr_cat[key] += val
+                self.visualizer.visualize_ranking(sims, epoch, meta_arr_cat, nested_metrics)
 
-            for metric in self.metrics:
-                metric_name = metric.__name__
-                res = metric(sims)
-                verbose(epoch=epoch, metrics=res, name=self.valid_data_loader[dl_idx].dataset_name,
-                        mode=metric_name)
-                nested_metrics[dl_idx][metric_name] = res
-
-                if self.writer is not None:
-                    to_write = format_nested_metrics_for_writer(res, mode=metric_name,
-                                                                name=self.valid_data_loader[dl_idx].dataset_name)
-                    for key, val in to_write.items():
-                        self.writer.log_scalar(key, val)
-
-                if self.visualizer is not None:
-                    meta_arr_cat = {key: [] for key in meta_arr[0]}
-                    for meta in meta_arr:
-                        for key, val in meta.items():
-                            meta_arr_cat[key] += val
-                    self.visualizer.visualize_ranking(sims, epoch, meta_arr_cat, nested_metrics)
-
-        res_dict = {f'val_loss_{dl_idx}': total_val_loss[dl_idx] / len(self.valid_data_loader[dl_idx])
-                    for dl_idx in range(len(self.valid_data_loader))}
+        res_dict = {'val_loss': total_val_loss / len(self.valid_data_loader)}
         res_dict['nested_val_metrics'] = nested_metrics
 
+        # self.inference_model.detachFromDevice()
         return res_dict
 
     def _progress(self, batch_idx, dl_idx):

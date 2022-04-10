@@ -1,5 +1,5 @@
 {
-    "name": "MSRVTTjsfusion_4f_stformer_pt-im21k",
+    "name": "IPU-Frozen-MSRVTT",
     "n_gpu": 1,
     "arch": {
         "type": "FrozenInTimeIPU",
@@ -51,7 +51,7 @@
             "batch_size": 4,
             "split": "val",
             "cut": "jsfusion",
-            "subsample": 1,
+            "subsample": 4,
             "text_params": {
                 "model": "distilbert-base-uncased",
                 "input": "text"
@@ -68,14 +68,14 @@
     "optimizer": {
         "type": "AdamW",
         "args":{
-            "lr": 3e-5,
+            "lr": 1e-5,
             "betas": [0.98,0.9],
             "weight_decay": 0.2,
             "accum_type": "torch.float16"
         }
     },
     "loss": {
-        "type": "CrossEntropy",
+        "type": "NormSoftmaxLoss",
         "args": {
         }
     },
